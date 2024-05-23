@@ -48,7 +48,7 @@ image[wgcf]="virb3/wgcf:2.2.18"
 
 defaults[transport]=tcp
 defaults[domain]=www.google.com
-defaults[port]=443
+defaults[port]=2083
 defaults[safenet]=OFF
 defaults[warp]=OFF
 defaults[warp_license]=""
@@ -995,7 +995,7 @@ function generate_engine_config {
   local reality_object=""
   local tls_object=""
   local warp_object=""
-  local reality_port=443
+  local reality_port=2083
   local temp_file
   if [[ ${config[transport]} == 'tuic' ]]; then
     type='tuic'
