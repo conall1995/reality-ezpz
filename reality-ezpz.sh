@@ -48,7 +48,7 @@ image[wgcf]="virb3/wgcf:2.2.18"
 
 defaults[transport]=tcp
 defaults[domain]=www.google.com
-defaults[port]=443
+defaults[port]=444
 defaults[safenet]=OFF
 defaults[warp]=OFF
 defaults[warp_license]=""
@@ -591,7 +591,7 @@ function build_config {
     echo 'You cannot use "shadowtls" transport with "xray" core. Use other transports or change core to sing-box'
     exit 1
   fi
-  if [[ ${config[security]} == 'letsencrypt' && ${config[port]} -ne 443 ]]; then
+  if [[ ${config[security]} == 'letsencrypt' && ${config[port]} -ne 444 ]]; then
     if lsof -i :80 >/dev/null 2>&1; then
       free_80=false
       for container in $(${docker_cmd} -p ${compose_project} ps -q); do
@@ -743,12 +743,12 @@ services:
   engine:
     image: ${image[${config[core]}]}
     $([[ ${config[security]} == 'reality' || ${config[transport]} == 'shadowtls' ]] && echo "ports:" || true)
-    $([[ (${config[security]} == 'reality' || ${config[transport]} == 'shadowtls') && ${config[port]} -eq 443 ]] && echo '- 80:8080' || true)
-    $([[ ${config[security]} == 'reality' || ${config[transport]} == 'shadowtls' ]] && echo "- ${config[port]}:8443" || true)
+    $([[ (${config[security]} == 'reality' || ${config[transport]} == 'shadowtls') && ${config[port]} -eq 444 ]] && echo '- 80:8080' || true)
+    $([[ ${config[security]} == 'reality' || ${config[transport]} == 'shadowtls' ]] && echo "- ${config[port]}:8444" || true)
     $([[ ${config[transport]} == 'tuic' || ${config[transport]} == 'hysteria2' ]] && echo "ports:" || true)
-    $([[ ${config[transport]} == 'tuic' || ${config[transport]} == 'hysteria2' ]] && echo "- ${config[port]}:8443/udp" || true)
+    $([[ ${config[transport]} == 'tuic' || ${config[transport]} == 'hysteria2' ]] && echo "- ${config[port]}:8444/udp" || true)
     $([[ ${config[security]} != 'reality' && ${config[transport]} != 'shadowtls' ]] && echo "expose:" || true)
-    $([[ ${config[security]} != 'reality' && ${config[transport]} != 'shadowtls' ]] && echo "- 8443" || true)
+    $([[ ${config[security]} != 'reality' && ${config[transport]} != 'shadowtls' ]] && echo "- 8444" || true)
     restart: always
     environment:
       TZ: Etc/UTC
@@ -772,8 +772,8 @@ echo "
   haproxy:
     image: ${image[haproxy]}
     ports:
-    $([[ ${config[security]} == 'letsencrypt' || ${config[port]} -eq 443 ]] && echo '- 80:8080' || true)
-    - ${config[port]}:8443
+    $([[ ${config[security]} == 'letsencrypt' || ${config[port]} -eq 444 ]] && echo '- 80:8080' || true)
+    - ${config[port]}:8444
     restart: always
     volumes:
     - ./${path[haproxy]#${config_path}/}:/usr/local/etc/haproxy/haproxy.cfg
@@ -855,7 +855,7 @@ $(if [[ ${config[security]} == 'letsencrypt' ]]; then echo "
   use_backend default
 frontend tls
 $(if [[ ${config[transport]} != 'tcp' ]]; then echo "
-  bind :::8443 v4v6 ssl crt /usr/local/etc/haproxy/server.pem alpn h2,http/1.1
+  bind :::8444 v4v6 ssl crt /usr/local/etc/haproxy/server.pem alpn h2,http/1.1
   mode http
   http-request set-header Host ${config[server]}
 $(if [[ ${config[security]} == 'letsencrypt' ]]; then echo "
@@ -866,7 +866,7 @@ $(if [[ ${config[transport]} != 'tuic' && ${config[transport]} != 'hysteria2' ]]
 "; fi)
   use_backend default
 "; else echo "
-  bind :::8443 v4v6
+  bind :::8444 v4v6
   mode tcp
   use_backend engine
 "; fi)
@@ -879,13 +879,13 @@ $(if [[ ${config[transport]} != 'tcp' ]]; then echo "
   mode tcp
 "; fi)
 $(if [[ ${config[transport]} == 'grpc' ]]; then echo "
-  server engine engine:8443 check tfo proto h2
+  server engine engine:8444 check tfo proto h2
 "; elif [[ ${config[transport]} == 'http' && ${config[core]} == 'sing-box' ]]; then echo "
-  server engine engine:8443 check tfo proto h2 ssl verify none
+  server engine engine:8444 check tfo proto h2 ssl verify none
 "; elif [[ ${config[transport]} == 'http' && ${config[core]} != 'sing-box' ]]; then echo "
-  server engine engine:8443 check tfo ssl verify none
+  server engine engine:8444 check tfo ssl verify none
 "; else echo "
-  server engine engine:8443 check tfo
+  server engine engine:8444 check tfo
 "; fi)
 "; fi)
 $(if [[ ${config[security]} == 'letsencrypt' ]]; then echo "
@@ -995,7 +995,7 @@ function generate_engine_config {
   local reality_object=""
   local tls_object=""
   local warp_object=""
-  local reality_port=443
+  local reality_port=444
   local temp_file
   if [[ ${config[transport]} == 'tuic' ]]; then
     type='tuic'
@@ -1085,7 +1085,7 @@ function generate_engine_config {
     {
       "type": "${type}",
       "listen": "::",
-      "listen_port": 8443,
+      "listen_port": 8444,
       "sniff": true,
       "sniff_override_destination": true,
       "domain_strategy": "prefer_ipv4",
@@ -1271,7 +1271,7 @@ EOF
     },
     {
       "listen": "0.0.0.0",
-      "port": 8443,
+      "port": 8444,
       "protocol": "vless",
       "tag": "inbound",
       "settings": {
@@ -2036,7 +2036,7 @@ function config_security_menu {
       message_box 'Invalid Configuration' 'You cannot use "reality" TLS certificate with "hysteria2" transport. Change TLS certifcate to "letsencrypt" or "selfsigned" or use other transports'
       continue
     fi
-    if [[ ${security} == 'letsencrypt' && ${config[port]} -ne 443 ]]; then
+    if [[ ${security} == 'letsencrypt' && ${config[port]} -ne 444 ]]; then
       if lsof -i :80 >/dev/null 2>&1; then
         free_80=false
         for container in $(${docker_cmd} -p ${compose_project} ps -q); do
