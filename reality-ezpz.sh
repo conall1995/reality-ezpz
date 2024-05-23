@@ -48,7 +48,7 @@ image[wgcf]="virb3/wgcf:2.2.18"
 
 defaults[transport]=tcp
 defaults[domain]=www.google.com
-defaults[port]=2053
+defaults[port]=443
 defaults[safenet]=OFF
 defaults[warp]=OFF
 defaults[warp_license]=""
@@ -534,7 +534,7 @@ function restore_defaults {
 }
 
 function build_config {
-  local free_81=true
+  local free_80=true
   if [[ ${args[regenerate]} == true ]]; then
     generate_keys
   fi
@@ -591,18 +591,18 @@ function build_config {
     echo 'You cannot use "shadowtls" transport with "xray" core. Use other transports or change core to sing-box'
     exit 1
   fi
-  if [[ ${config[security]} == 'letsencrypt' && ${config[port]} -ne 2053 ]]; then
+  if [[ ${config[security]} == 'letsencrypt' && ${config[port]} -ne 2083 ]]; then
     if lsof -i :81 >/dev/null 2>&1; then
-      free_81=false
+      free_80=false
       for container in $(${docker_cmd} -p ${compose_project} ps -q); do
         if docker port "${container}"| grep '0.0.0.0:81' >/dev/null 2>&1; then
-          free_81=true
+          free_80=true
           break
         fi
       done
     fi
-    if [[ ${free_81} != 'true' ]]; then
-      echo 'Port 81 must be free if you want to use "letsencrypt" as the security option.'
+    if [[ ${free_80} != 'true' ]]; then
+      echo 'Port 80 must be free if you want to use "letsencrypt" as the security option.'
       exit 1
     fi
   fi
@@ -743,12 +743,12 @@ services:
   engine:
     image: ${image[${config[core]}]}
     $([[ ${config[security]} == 'reality' || ${config[transport]} == 'shadowtls' ]] && echo "ports:" || true)
-    $([[ (${config[security]} == 'reality' || ${config[transport]} == 'shadowtls') && ${config[port]} -eq 2053 ]] && echo '- 81:8181' || true)
-    $([[ ${config[security]} == 'reality' || ${config[transport]} == 'shadowtls' ]] && echo "- ${config[port]}:82053" || true)
+    $([[ (${config[security]} == 'reality' || ${config[transport]} == 'shadowtls') && ${config[port]} -eq 2083 ]] && echo '- 80:8180' || true)
+    $([[ ${config[security]} == 'reality' || ${config[transport]} == 'shadowtls' ]] && echo "- ${config[port]}:8443" || true)
     $([[ ${config[transport]} == 'tuic' || ${config[transport]} == 'hysteria2' ]] && echo "ports:" || true)
-    $([[ ${config[transport]} == 'tuic' || ${config[transport]} == 'hysteria2' ]] && echo "- ${config[port]}:82053/udp" || true)
+    $([[ ${config[transport]} == 'tuic' || ${config[transport]} == 'hysteria2' ]] && echo "- ${config[port]}:8443/udp" || true)
     $([[ ${config[security]} != 'reality' && ${config[transport]} != 'shadowtls' ]] && echo "expose:" || true)
-    $([[ ${config[security]} != 'reality' && ${config[transport]} != 'shadowtls' ]] && echo "- 82053" || true)
+    $([[ ${config[security]} != 'reality' && ${config[transport]} != 'shadowtls' ]] && echo "- 8443" || true)
     restart: always
     environment:
       TZ: Etc/UTC
@@ -763,7 +763,7 @@ echo "
   nginx:
     image: ${image[nginx]}
     expose:
-    - 81
+    - 80
     restart: always
     volumes:
     - ./website:/usr/share/nginx/html
@@ -772,8 +772,8 @@ echo "
   haproxy:
     image: ${image[haproxy]}
     ports:
-    $([[ ${config[security]} == 'letsencrypt' || ${config[port]} -eq 2053 ]] && echo '- 81:8181' || true)
-    - ${config[port]}:82053
+    $([[ ${config[security]} == 'letsencrypt' || ${config[port]} -eq 2083 ]] && echo '- 80:8180' || true)
+    - ${config[port]}:8443
     restart: always
     volumes:
     - ./${path[haproxy]#${config_path}/}:/usr/local/etc/haproxy/haproxy.cfg
@@ -787,7 +787,7 @@ echo "
     build:
       context: ./certbot
     expose:
-    - 81
+    - 80
     restart: always
     volumes:
     - /var/run/docker.sock:/var/run/docker.sock
@@ -846,7 +846,7 @@ defaults
   timeout queue 15s
 frontend http
   mode http
-  bind :::8181 v4v6
+  bind :::8180 v4v6
 $(if [[ ${config[security]} == 'letsencrypt' ]]; then echo "
   use_backend certbot if { path_beg /.well-known/acme-challenge }
   acl letsencrypt-acl path_beg /.well-known/acme-challenge
@@ -855,7 +855,7 @@ $(if [[ ${config[security]} == 'letsencrypt' ]]; then echo "
   use_backend default
 frontend tls
 $(if [[ ${config[transport]} != 'tcp' ]]; then echo "
-  bind :::82053 v4v6 ssl crt /usr/local/etc/haproxy/server.pem alpn h2,http/1.1
+  bind :::8443 v4v6 ssl crt /usr/local/etc/haproxy/server.pem alpn h2,http/1.1
   mode http
   http-request set-header Host ${config[server]}
 $(if [[ ${config[security]} == 'letsencrypt' ]]; then echo "
@@ -866,7 +866,7 @@ $(if [[ ${config[transport]} != 'tuic' && ${config[transport]} != 'hysteria2' ]]
 "; fi)
   use_backend default
 "; else echo "
-  bind :::82053 v4v6
+  bind :::8443 v4v6
   mode tcp
   use_backend engine
 "; fi)
@@ -879,13 +879,13 @@ $(if [[ ${config[transport]} != 'tcp' ]]; then echo "
   mode tcp
 "; fi)
 $(if [[ ${config[transport]} == 'grpc' ]]; then echo "
-  server engine engine:82053 check tfo proto h2
+  server engine engine:8443 check tfo proto h2
 "; elif [[ ${config[transport]} == 'http' && ${config[core]} == 'sing-box' ]]; then echo "
-  server engine engine:82053 check tfo proto h2 ssl verify none
+  server engine engine:8443 check tfo proto h2 ssl verify none
 "; elif [[ ${config[transport]} == 'http' && ${config[core]} != 'sing-box' ]]; then echo "
-  server engine engine:82053 check tfo ssl verify none
+  server engine engine:8443 check tfo ssl verify none
 "; else echo "
-  server engine engine:82053 check tfo
+  server engine engine:8443 check tfo
 "; fi)
 "; fi)
 $(if [[ ${config[security]} == 'letsencrypt' ]]; then echo "
@@ -995,7 +995,7 @@ function generate_engine_config {
   local reality_object=""
   local tls_object=""
   local warp_object=""
-  local reality_port=2053
+  local reality_port=443
   local temp_file
   if [[ ${config[transport]} == 'tuic' ]]; then
     type='tuic'
@@ -1044,7 +1044,7 @@ function generate_engine_config {
         "private_key": "'"${config[warp_private_key]}"'",
         "peer_public_key": "bmXOC+F1FxEMF9dyiK2H5/1SUtzH0JuVo51h2wPfgyo=",
         "reserved": '"$(warp_decode_reserved "${config[warp_client_id]}")"',
-        "mtu": 1281
+        "mtu": 1280
       },'
     fi
     for user in "${!users[@]}"; do
@@ -1077,15 +1077,15 @@ function generate_engine_config {
     {
       "type": "direct",
       "listen": "::",
-      "listen_port": 8181,
+      "listen_port": 8080,
       "network": "tcp",
       "override_address": "${config[domain]%%:*}",
-      "override_port": 81
+      "override_port": 80
     },
     {
       "type": "${type}",
       "listen": "::",
-      "listen_port": 82053,
+      "listen_port": 8443,
       "sniff": true,
       "sniff_override_destination": true,
       "domain_strategy": "prefer_ipv4",
@@ -1124,7 +1124,7 @@ function generate_engine_config {
       "type": "shadowsocks",
       "tag": "shadowsocks",
       "listen": "127.0.0.1",
-      "listen_port": 82053,
+      "listen_port": 8444,
       "sniff": true,
       "sniff_override_destination": true,
       "domain_strategy": "prefer_ipv4",
@@ -1178,7 +1178,7 @@ function generate_engine_config {
           "203.0.113.0/24",
           "::1/128",
           "fc00::/7",
-          "fe81::/10"
+          "fe80::/10"
         ],
         "outbound": "block"
       },
@@ -1240,7 +1240,7 @@ EOF
               "publicKey": "bmXOC+F1FxEMF9dyiK2H5/1SUtzH0JuVo51h2wPfgyo="
             }
           ],
-          "mtu": 1281
+          "mtu": 1280
         }
       },'
     fi
@@ -1261,17 +1261,17 @@ EOF
   "inbounds": [
     {
       "listen": "0.0.0.0",
-      "port": 8181,
+      "port": 8080,
       "protocol": "dokodemo-door",
       "settings": {
         "address": "${config[domain]%%:*}",
-        "port": 81,
+        "port": 80,
         "network": "tcp"
       }
     },
     {
       "listen": "0.0.0.0",
-      "port": 82053,
+      "port": 8443,
       "protocol": "vless",
       "tag": "inbound",
       "settings": {
@@ -1332,7 +1332,7 @@ EOF
           "203.0.113.0/24",
           "::1/128",
           "fc00::/7",
-          "fe81::/10",
+          "fe80::/10",
           "geoip:private"
         ],
         "outboundTag": "block"
@@ -1439,7 +1439,7 @@ function print_client_configuration {
     client_config="${client_config}$([[ ${config[security]} == 'selfsigned' ]] && echo "&insecure=1" || true)"
     client_config="${client_config}#${username}"
   elif [[ ${config[transport]} == 'shadowtls' ]]; then
-    client_config='{"dns":{"independent_cache":true,"rules":[{"domain":["dns.google"],"server":"dns-direct"}],"servers":[{"address":"https://dns.google/dns-query","address_resolver":"dns-direct","strategy":"ipv4_only","tag":"dns-remote"},{"address":"local","address_resolver":"dns-local","detour":"direct","strategy":"ipv4_only","tag":"dns-direct"},{"address":"local","detour":"direct","tag":"dns-local"},{"address":"rcode://success","tag":"dns-block"}]},"inbounds":[{"listen":"127.0.0.1","listen_port":6450,"override_address":"8.8.8.8","override_port":53,"tag":"dns-in","type":"direct"},{"domain_strategy":"","endpoint_independent_nat":true,"inet4_address":["172.19.0.1/28"],"mtu":9000,"sniff":true,"sniff_override_destination":false,"stack":"mixed","tag":"tun-in","auto_route":true,"type":"tun"},{"domain_strategy":"","listen":"127.0.0.1","listen_port":2081,"sniff":true,"sniff_override_destination":false,"tag":"mixed-in","type":"mixed"}],"log":{"level":"warning"},"outbounds":[{"method":"chacha20-ietf-poly1305","password":"'"${users[${username}]}"'","server":"127.0.0.1","server_port":1081,"type":"shadowsocks","udp_over_tcp":true,"domain_strategy":"","tag":"proxy","detour":"shadowtls"},{"password":"'"${users[${username}]}"'","server":"'"${config[server]}"'","server_port":'"${config[port]}"',"tls":{"enabled":true,"insecure":false,"server_name":"'"${config[domain]%%:*}"'","utls":{"enabled":true,"fingerprint":"chrome"}},"version":3,"type":"shadowtls","domain_strategy":"","tag":"shadowtls"},{"tag":"direct","type":"direct"},{"tag":"bypass","type":"direct"},{"tag":"block","type":"block"},{"tag":"dns-out","type":"dns"}],"route":{"auto_detect_interface":true,"rule_set":[],"rules":[{"outbound":"dns-out","port":[53]},{"inbound":["dns-in"],"outbound":"dns-out"},{"ip_cidr":["224.0.0.0/3","ff00::/8"],"outbound":"block","source_ip_cidr":["224.0.0.0/3","ff00::/8"]}]}}'
+    client_config='{"dns":{"independent_cache":true,"rules":[{"domain":["dns.google"],"server":"dns-direct"}],"servers":[{"address":"https://dns.google/dns-query","address_resolver":"dns-direct","strategy":"ipv4_only","tag":"dns-remote"},{"address":"local","address_resolver":"dns-local","detour":"direct","strategy":"ipv4_only","tag":"dns-direct"},{"address":"local","detour":"direct","tag":"dns-local"},{"address":"rcode://success","tag":"dns-block"}]},"inbounds":[{"listen":"127.0.0.1","listen_port":6450,"override_address":"8.8.8.8","override_port":53,"tag":"dns-in","type":"direct"},{"domain_strategy":"","endpoint_independent_nat":true,"inet4_address":["172.19.0.1/28"],"mtu":9000,"sniff":true,"sniff_override_destination":false,"stack":"mixed","tag":"tun-in","auto_route":true,"type":"tun"},{"domain_strategy":"","listen":"127.0.0.1","listen_port":2080,"sniff":true,"sniff_override_destination":false,"tag":"mixed-in","type":"mixed"}],"log":{"level":"warning"},"outbounds":[{"method":"chacha20-ietf-poly1305","password":"'"${users[${username}]}"'","server":"127.0.0.1","server_port":1080,"type":"shadowsocks","udp_over_tcp":true,"domain_strategy":"","tag":"proxy","detour":"shadowtls"},{"password":"'"${users[${username}]}"'","server":"'"${config[server]}"'","server_port":'"${config[port]}"',"tls":{"enabled":true,"insecure":false,"server_name":"'"${config[domain]%%:*}"'","utls":{"enabled":true,"fingerprint":"chrome"}},"version":3,"type":"shadowtls","domain_strategy":"","tag":"shadowtls"},{"tag":"direct","type":"direct"},{"tag":"bypass","type":"direct"},{"tag":"block","type":"block"},{"tag":"dns-out","type":"dns"}],"route":{"auto_detect_interface":true,"rule_set":[],"rules":[{"outbound":"dns-out","port":[53]},{"inbound":["dns-in"],"outbound":"dns-out"},{"ip_cidr":["224.0.0.0/3","ff00::/8"],"outbound":"block","source_ip_cidr":["224.0.0.0/3","ff00::/8"]}]}}'
   else
     client_config="vless://"
     client_config="${client_config}${users[${username}]}"
@@ -1679,7 +1679,7 @@ Fingerprint: chrome
 Protocol: shadowsocks
 Remarks: ${username}-shadowsocks
 Address: 127.0.0.1
-Port: 1081
+Port: 1080
 Password: ${users[$username]}
 Encryption Method: chacha20-ietf-poly1305
 UDP over TCP: true
@@ -2009,7 +2009,7 @@ function config_sni_domain_menu {
 
 function config_security_menu {
   local security
-  local free_81=true
+  local free_80=true
   while true; do
     security=$(whiptail --clear --backtitle "$BACKTITLE" --title "Security Type" \
       --radiolist --noitem "Select a security type:" $HEIGHT $WIDTH $CHOICE_HEIGHT \
@@ -2036,18 +2036,18 @@ function config_security_menu {
       message_box 'Invalid Configuration' 'You cannot use "reality" TLS certificate with "hysteria2" transport. Change TLS certifcate to "letsencrypt" or "selfsigned" or use other transports'
       continue
     fi
-    if [[ ${security} == 'letsencrypt' && ${config[port]} -ne 2053 ]]; then
+    if [[ ${security} == 'letsencrypt' && ${config[port]} -ne 2083 ]]; then
       if lsof -i :81 >/dev/null 2>&1; then
-        free_81=false
+        free_80=false
         for container in $(${docker_cmd} -p ${compose_project} ps -q); do
           if docker port "${container}" | grep '0.0.0.0:81' >/dev/null 2>&1; then
-            free_81=true
+            free_80=true
             break
           fi
         done
       fi
-      if [[ ${free_81} != 'true' ]]; then
-        message_box 'Port 81 must be free if you want to use "letsencrypt" as the security option.'
+      if [[ ${free_80} != 'true' ]]; then
+        message_box 'Port 80 must be free if you want to use "letsencrypt" as the security option.'
         continue
       fi
     fi
