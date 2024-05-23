@@ -534,7 +534,7 @@ function restore_defaults {
 }
 
 function build_config {
-  local free_80=true
+  local free_81=true
   if [[ ${args[regenerate]} == true ]]; then
     generate_keys
   fi
@@ -592,17 +592,17 @@ function build_config {
     exit 1
   fi
   if [[ ${config[security]} == 'letsencrypt' && ${config[port]} -ne 444 ]]; then
-    if lsof -i :80 >/dev/null 2>&1; then
-      free_80=false
+    if lsof -i :81 >/dev/null 2>&1; then
+      free_81=false
       for container in $(${docker_cmd} -p ${compose_project} ps -q); do
-        if docker port "${container}"| grep '0.0.0.0:80' >/dev/null 2>&1; then
-          free_80=true
+        if docker port "${container}"| grep '0.0.0.0:81' >/dev/null 2>&1; then
+          free_81=true
           break
         fi
       done
     fi
-    if [[ ${free_80} != 'true' ]]; then
-      echo 'Port 80 must be free if you want to use "letsencrypt" as the security option.'
+    if [[ ${free_81} != 'true' ]]; then
+      echo 'Port 81 must be free if you want to use "letsencrypt" as the security option.'
       exit 1
     fi
   fi
@@ -743,7 +743,7 @@ services:
   engine:
     image: ${image[${config[core]}]}
     $([[ ${config[security]} == 'reality' || ${config[transport]} == 'shadowtls' ]] && echo "ports:" || true)
-    $([[ (${config[security]} == 'reality' || ${config[transport]} == 'shadowtls') && ${config[port]} -eq 444 ]] && echo '- 80:8080' || true)
+    $([[ (${config[security]} == 'reality' || ${config[transport]} == 'shadowtls') && ${config[port]} -eq 444 ]] && echo '- 81:8181' || true)
     $([[ ${config[security]} == 'reality' || ${config[transport]} == 'shadowtls' ]] && echo "- ${config[port]}:8444" || true)
     $([[ ${config[transport]} == 'tuic' || ${config[transport]} == 'hysteria2' ]] && echo "ports:" || true)
     $([[ ${config[transport]} == 'tuic' || ${config[transport]} == 'hysteria2' ]] && echo "- ${config[port]}:8444/udp" || true)
@@ -763,7 +763,7 @@ echo "
   nginx:
     image: ${image[nginx]}
     expose:
-    - 80
+    - 81
     restart: always
     volumes:
     - ./website:/usr/share/nginx/html
@@ -772,7 +772,7 @@ echo "
   haproxy:
     image: ${image[haproxy]}
     ports:
-    $([[ ${config[security]} == 'letsencrypt' || ${config[port]} -eq 444 ]] && echo '- 80:8080' || true)
+    $([[ ${config[security]} == 'letsencrypt' || ${config[port]} -eq 444 ]] && echo '- 81:8181' || true)
     - ${config[port]}:8444
     restart: always
     volumes:
@@ -787,7 +787,7 @@ echo "
     build:
       context: ./certbot
     expose:
-    - 80
+    - 81
     restart: always
     volumes:
     - /var/run/docker.sock:/var/run/docker.sock
@@ -846,7 +846,7 @@ defaults
   timeout queue 15s
 frontend http
   mode http
-  bind :::8080 v4v6
+  bind :::8181 v4v6
 $(if [[ ${config[security]} == 'letsencrypt' ]]; then echo "
   use_backend certbot if { path_beg /.well-known/acme-challenge }
   acl letsencrypt-acl path_beg /.well-known/acme-challenge
@@ -891,11 +891,11 @@ $(if [[ ${config[transport]} == 'grpc' ]]; then echo "
 $(if [[ ${config[security]} == 'letsencrypt' ]]; then echo "
 backend certbot
   mode http
-  server certbot certbot:80
+  server certbot certbot:81
 "; fi)
 backend default
   mode http
-  server nginx nginx:80
+  server nginx nginx:81
 " | grep -vE '^\s*$' > "${path[haproxy]}"
 }
 
@@ -1044,7 +1044,7 @@ function generate_engine_config {
         "private_key": "'"${config[warp_private_key]}"'",
         "peer_public_key": "bmXOC+F1FxEMF9dyiK2H5/1SUtzH0JuVo51h2wPfgyo=",
         "reserved": '"$(warp_decode_reserved "${config[warp_client_id]}")"',
-        "mtu": 1280
+        "mtu": 1281
       },'
     fi
     for user in "${!users[@]}"; do
@@ -1077,10 +1077,10 @@ function generate_engine_config {
     {
       "type": "direct",
       "listen": "::",
-      "listen_port": 8080,
+      "listen_port": 8181,
       "network": "tcp",
       "override_address": "${config[domain]%%:*}",
-      "override_port": 80
+      "override_port": 81
     },
     {
       "type": "${type}",
@@ -1178,7 +1178,7 @@ function generate_engine_config {
           "203.0.113.0/24",
           "::1/128",
           "fc00::/7",
-          "fe80::/10"
+          "fe81::/10"
         ],
         "outbound": "block"
       },
@@ -1240,7 +1240,7 @@ EOF
               "publicKey": "bmXOC+F1FxEMF9dyiK2H5/1SUtzH0JuVo51h2wPfgyo="
             }
           ],
-          "mtu": 1280
+          "mtu": 1281
         }
       },'
     fi
@@ -1261,11 +1261,11 @@ EOF
   "inbounds": [
     {
       "listen": "0.0.0.0",
-      "port": 8080,
+      "port": 8181,
       "protocol": "dokodemo-door",
       "settings": {
         "address": "${config[domain]%%:*}",
-        "port": 80,
+        "port": 81,
         "network": "tcp"
       }
     },
@@ -1332,7 +1332,7 @@ EOF
           "203.0.113.0/24",
           "::1/128",
           "fc00::/7",
-          "fe80::/10",
+          "fe81::/10",
           "geoip:private"
         ],
         "outboundTag": "block"
@@ -1439,7 +1439,7 @@ function print_client_configuration {
     client_config="${client_config}$([[ ${config[security]} == 'selfsigned' ]] && echo "&insecure=1" || true)"
     client_config="${client_config}#${username}"
   elif [[ ${config[transport]} == 'shadowtls' ]]; then
-    client_config='{"dns":{"independent_cache":true,"rules":[{"domain":["dns.google"],"server":"dns-direct"}],"servers":[{"address":"https://dns.google/dns-query","address_resolver":"dns-direct","strategy":"ipv4_only","tag":"dns-remote"},{"address":"local","address_resolver":"dns-local","detour":"direct","strategy":"ipv4_only","tag":"dns-direct"},{"address":"local","detour":"direct","tag":"dns-local"},{"address":"rcode://success","tag":"dns-block"}]},"inbounds":[{"listen":"127.0.0.1","listen_port":6450,"override_address":"8.8.8.8","override_port":53,"tag":"dns-in","type":"direct"},{"domain_strategy":"","endpoint_independent_nat":true,"inet4_address":["172.19.0.1/28"],"mtu":9000,"sniff":true,"sniff_override_destination":false,"stack":"mixed","tag":"tun-in","auto_route":true,"type":"tun"},{"domain_strategy":"","listen":"127.0.0.1","listen_port":2080,"sniff":true,"sniff_override_destination":false,"tag":"mixed-in","type":"mixed"}],"log":{"level":"warning"},"outbounds":[{"method":"chacha20-ietf-poly1305","password":"'"${users[${username}]}"'","server":"127.0.0.1","server_port":1080,"type":"shadowsocks","udp_over_tcp":true,"domain_strategy":"","tag":"proxy","detour":"shadowtls"},{"password":"'"${users[${username}]}"'","server":"'"${config[server]}"'","server_port":'"${config[port]}"',"tls":{"enabled":true,"insecure":false,"server_name":"'"${config[domain]%%:*}"'","utls":{"enabled":true,"fingerprint":"chrome"}},"version":3,"type":"shadowtls","domain_strategy":"","tag":"shadowtls"},{"tag":"direct","type":"direct"},{"tag":"bypass","type":"direct"},{"tag":"block","type":"block"},{"tag":"dns-out","type":"dns"}],"route":{"auto_detect_interface":true,"rule_set":[],"rules":[{"outbound":"dns-out","port":[53]},{"inbound":["dns-in"],"outbound":"dns-out"},{"ip_cidr":["224.0.0.0/3","ff00::/8"],"outbound":"block","source_ip_cidr":["224.0.0.0/3","ff00::/8"]}]}}'
+    client_config='{"dns":{"independent_cache":true,"rules":[{"domain":["dns.google"],"server":"dns-direct"}],"servers":[{"address":"https://dns.google/dns-query","address_resolver":"dns-direct","strategy":"ipv4_only","tag":"dns-remote"},{"address":"local","address_resolver":"dns-local","detour":"direct","strategy":"ipv4_only","tag":"dns-direct"},{"address":"local","detour":"direct","tag":"dns-local"},{"address":"rcode://success","tag":"dns-block"}]},"inbounds":[{"listen":"127.0.0.1","listen_port":6450,"override_address":"8.8.8.8","override_port":53,"tag":"dns-in","type":"direct"},{"domain_strategy":"","endpoint_independent_nat":true,"inet4_address":["172.19.0.1/28"],"mtu":9000,"sniff":true,"sniff_override_destination":false,"stack":"mixed","tag":"tun-in","auto_route":true,"type":"tun"},{"domain_strategy":"","listen":"127.0.0.1","listen_port":2081,"sniff":true,"sniff_override_destination":false,"tag":"mixed-in","type":"mixed"}],"log":{"level":"warning"},"outbounds":[{"method":"chacha20-ietf-poly1305","password":"'"${users[${username}]}"'","server":"127.0.0.1","server_port":1081,"type":"shadowsocks","udp_over_tcp":true,"domain_strategy":"","tag":"proxy","detour":"shadowtls"},{"password":"'"${users[${username}]}"'","server":"'"${config[server]}"'","server_port":'"${config[port]}"',"tls":{"enabled":true,"insecure":false,"server_name":"'"${config[domain]%%:*}"'","utls":{"enabled":true,"fingerprint":"chrome"}},"version":3,"type":"shadowtls","domain_strategy":"","tag":"shadowtls"},{"tag":"direct","type":"direct"},{"tag":"bypass","type":"direct"},{"tag":"block","type":"block"},{"tag":"dns-out","type":"dns"}],"route":{"auto_detect_interface":true,"rule_set":[],"rules":[{"outbound":"dns-out","port":[53]},{"inbound":["dns-in"],"outbound":"dns-out"},{"ip_cidr":["224.0.0.0/3","ff00::/8"],"outbound":"block","source_ip_cidr":["224.0.0.0/3","ff00::/8"]}]}}'
   else
     client_config="vless://"
     client_config="${client_config}${users[${username}]}"
@@ -1679,7 +1679,7 @@ Fingerprint: chrome
 Protocol: shadowsocks
 Remarks: ${username}-shadowsocks
 Address: 127.0.0.1
-Port: 1080
+Port: 1081
 Password: ${users[$username]}
 Encryption Method: chacha20-ietf-poly1305
 UDP over TCP: true
@@ -2009,7 +2009,7 @@ function config_sni_domain_menu {
 
 function config_security_menu {
   local security
-  local free_80=true
+  local free_81=true
   while true; do
     security=$(whiptail --clear --backtitle "$BACKTITLE" --title "Security Type" \
       --radiolist --noitem "Select a security type:" $HEIGHT $WIDTH $CHOICE_HEIGHT \
@@ -2037,17 +2037,17 @@ function config_security_menu {
       continue
     fi
     if [[ ${security} == 'letsencrypt' && ${config[port]} -ne 444 ]]; then
-      if lsof -i :80 >/dev/null 2>&1; then
-        free_80=false
+      if lsof -i :81 >/dev/null 2>&1; then
+        free_81=false
         for container in $(${docker_cmd} -p ${compose_project} ps -q); do
-          if docker port "${container}" | grep '0.0.0.0:80' >/dev/null 2>&1; then
-            free_80=true
+          if docker port "${container}" | grep '0.0.0.0:81' >/dev/null 2>&1; then
+            free_81=true
             break
           fi
         done
       fi
-      if [[ ${free_80} != 'true' ]]; then
-        message_box 'Port 80 must be free if you want to use "letsencrypt" as the security option.'
+      if [[ ${free_81} != 'true' ]]; then
+        message_box 'Port 81 must be free if you want to use "letsencrypt" as the security option.'
         continue
       fi
     fi
